@@ -1,0 +1,125 @@
+#Load Libraries 
+import numpy as np
+import pandas as pd
+from sklearn.decomposition import PCA
+from sklearn import datasets
+from sklearn.preprocessing import scale
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestRegressor
+from sklearn import metrics
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report
+import matplotlib.pyplot as plt
+
+#Load Data 
+df = pd.read_csv("data.csv")
+X = df.loc[:, ' ROA(C) before interest and depreciation before interest':' Equity to Liability'].values
+y = df.loc[:,['Bankrupt?']].values
+
+#Scaler/normalize 
+scaler = StandardScaler()
+Xn = scaler.fit_transform(X)
+
+#PCA 
+pca_prep = PCA().fit(Xn)
+pca_prep.n_components_
+
+
+
+#PCA Explained Variance 
+pca_prep.explained_variance_
+plt.plot(pca_prep.explained_variance_ratio_)
+
+#Graph plot - PCA components 
+plt.plot(pca_prep.explained_variance_ratio_)
+plt.xlabel('k number of components')
+plt.ylabel('Explained variance')
+plt.grid(True)
+plt.show()
+
+#Number of components 
+n_pc = 17
+pca = PCA(n_components = n_pc).fit(Xn)
+Xp = pca.transform(Xn)
+print(f'After PCA, we use {pca.n_components_} components. \n')
+
+
+# Split the data into training and testing subsets.
+X_train, X_test, y_train, y_test = train_test_split(X,y,test_size =.2,random_state=1234,stratify=y)
+Xp_train, Xp_test, yp_train, yp_test = train_test_split(Xp,y,test_size =.2,random_state=1234,stratify=y)
+
+
+#Random Forest Model
+rfcm = RandomForestClassifier().fit(X_train, y_train) #Original Data
+rfcm_p = RandomForestClassifier().fit(Xp_train, yp_train) #Reduced Data
+
+
+#Prediction
+y_pred = rfcm.predict(X_test) 
+y_pred_p = rfcm_p.predict(Xp_test) 
+
+
+# Compare the performance of each mode
+report_original = classification_report(y_test, y_pred)
+report_pca = classification_report(yp_test, y_pred_p)
+print(f'Classification Report - original\n{report_original}')
+print(f'Classification Report - pca\n{report_pca}')
+
+
+
+
+
+## Feature selection and performance comparison 
+
+# Draw a bar chart to see the sorted importance values with feature names.
+# Horizontal Bar Chart 
+# %matplotlib auto
+# %matplotlib inline
+
+importances = rfcm.feature_importances_
+np.sum(importances)
+plt.barh(fn,importances)
+
+df_importances = pd.DataFrame(data=importances, index=fn, 
+                              columns=['importance_value'])
+df_importances.sort_values(by = 'importance_value', ascending=True, 
+                            inplace=True)
+
+plt.barh(df_importances.index,df_importances.importance_value)
+
+
+# Build a model with a subset of those features.  
+selector = SelectFromModel(estimator=RandomForestClassifier(),threshold=0.015)
+X_reduced = selector.fit_transform(X,y)
+selector.threshold_ 
+selected_TF = selector.get_support()
+print(f'\n** {selected_TF.sum()} features are selected.')  
+X_reduced.shape
+
+
+# Show those selected features.
+selected_features = []
+for i,j in zip(selected_TF, fn):
+    if i: selected_features.append(j)
+print(f'Selected Features: {selected_features}') 
+
+
+# First 5 features
+print(selected_features[0:5])
+
+
+# Build a model using those reduced number of features.
+X_reduced_train, X_reduced_test, y_reduced_train, y_reduced_test \
+       = train_test_split(X_reduced,y,test_size =.3, stratify=y)
+
+
+# Build a model with the reduced number of features.
+rfcm2 = RandomForestClassifier().fit(X_reduced_train, y_reduced_train)
+y_reduced_pred = rfcm2.predict(X_reduced_test)
+
+
+#Classification for Reduced Data 
+print('\nClassification Report after feature reduction\n')
+print(metrics.classification_report(y_reduced_test,y_reduced_pred))
+
